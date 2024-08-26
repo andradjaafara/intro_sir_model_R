@@ -1,0 +1,666 @@
+---
+title: "Pengantar pemodelan matematika penyakit infeksi dengan R"
+subtitle: "modul pengantar Indonesia Infectious Disease Modelling Community - INDEMIC"
+author: "Bimandra Djaafara"
+date: today
+format: 
+  html:
+    embed-resources: true
+    theme: cosmo
+    toc: true
+editor: visual
+---
+
+## Pengantar
+
+Materi mengenai pengantar pemodelan matematika penyakit infeksi dengan R ini satu paket dengan presentasi dengan judul 'pengantar pemodelan matematika penyakit infeksi' yang dapat diakses melalui link ini (saat ini materi video belum ada). Apabila belum menonton video presentasi tersebut, saya menyarankan untuk menontonnya terlebih dahulu supaya pemahaman teori mengenai pemodelannya dapat dimengerti terlebih dahulu karena materi ini akan lebih fokus terhadap aspek praktik pemodelan menggunakan software komputer.
+
+Materi ini akan berisi beberapa tipe model sederhana, seperti model SIR populasi tertutup, SIR dengan demografi, dan SEIR.
+
+Apabila belum pernah menggunakan R sebelumnya, silakan simak materi pengantar pemrograman dengan R yang dapat diakses di [link](https://drive.google.com/drive/folders/1_cU1vg4DtKByQ-77JKHFn8oSKhnjVD7n) berikut.
+
+Library yang akan digunakan pada sesi kali ini adalah: `tidyverse` dan `odin`
+
+## `odin`
+
+`odin` merupakan package untuk menyelesaikan (solving) ordinary differential equations (ODEs) di R (<https://mrc-ide.github.io/odin/>). Package ini dibangun oleh tim research software engineer yang berbasis di MRC Centre for Global Infectious Disease Analysis, Imperial College London. Kelebihan package ini dibandingkan solver ODE lain yang biasa dipakai seperti `deSolve` adalah pada kecepatannya, utamanya ketika mengerjakan model-model yang cukup kompleks. Package ini juga terkoneksi dengan package-package lain yang mendukung untuk melakukan pemodelan stokastik seperti `dust` dan `odin.dust`, serta untuk melakukan metode monte carlo simulations dengan `mcstate`. Dengan alasan-alasan ini, maka saya akan mengajarkan penggunakan `odin` sebagai solver ODEs untuk model penyakit infeksi kita.
+
+Untuk menginstall `odin`, ketik dan jalankan kode berikut:
+
+```{r}
+#| echo: true
+#| eval: false
+
+install.packages("odin")
+```
+
+Alternatif cara instalasi lain ada di website `odin`.
+
+## Pemodelan penyakit infeksi dengan R
+
+### Langkah pemrograman
+
+Langkah awal yang perlu dilakukan adalah melakukan translasi dari persamaan diferensial biasa (ODE) untuk model penyakit yang kita miliki ke dalam sebuah function dalam R, menggunakan package `odin`. Di dalam function model tersebut, kita akan mendefinisikan variabel-variabel mana saja yang merupakan *state variable* dan mana saja yang merupakan *model parameter*. Untuk *state variable*, kita perlu memberikan *initial value* dari masing-masing variabel tersebut. Untuk *model parameter*, kita perlu memberikan nilai yang kita gunakan untuk simulasi model kita. Untuk nilai-nilai dari variabel-variabel tersebut, dapat diprogram menjadi nilai yang *fix* dan tidak dapat diganti tanpa mengubah function dari model-nya sendiri. Atau dapat juga menjadi sebuah nilai yang dapat diubah sebelum function tersebut disimulasikan (menjadi salah satu *input variable*).
+
+Setelah menuliskan function dari model tersebut, maka tahapan berikutnya adalah melakukan simulasi. Simulasi dilakukan dengan mendefinisikan terlebih dahulu berapa lama model akan disimulasikan (seberapa banyak *timestep* yang diperlukan). Apabila ada variabel-variabel yang bisa dibuat fleksibel nilainya (tidak *fix*), maka nilainya juga dapat di-set sebelum model disimulasikan.
+
+Setelah simulasi dilakukan, maka *output* model dapat diekstrak, lalu lakukan analisis dari hasil simulasi tersebut dengan melakukan eksplorasi data atau perbandingan dengan model-model lain yang disimulasikan.
+
+## Penulisan function model
+
+Pada tahap ini, kita akan belajar melakukan penulisan function model dengan `odin`. Pada function model ini, ada beberapa aspek penting:
+
+-   *state variable* (contoh: S, I, dan R)
+-   *model parameter* (contoh: beta, gamma)
+-   persamaan diferensial (ODE)
+-   nilai-nilai dari *state variable* dan *model parameter*
+
+Kita akan menggunakan model SIR sebagai contoh untuk latihan penulisan model pertama kita.
+
+### Model SIR dengan populasi tertutup
+
+Model SIR mengasumsikan bahwa di dalam populasi yang sedang diamati terdapat tiga kategori populasi berdasarkan status infeksinya yaitu Susceptible (S), Infected (I), dan Recovered (R). Lalu, model ini juga memiliki dua parameter yaitu *transmission rate* ($\beta$) dan *recovery rate* ($\gamma$). Persamaan diferensial (ODE) untuk model SIR dengan populasi tertutup adalah sebagai berikut:
+
+$$
+\frac{dS}{dt}=-\beta S \frac{I}{N}
+$$
+
+$$
+\frac{dI}{dt}=\beta S \frac{I}{N} - \gamma I
+$$
+
+$$
+\frac{dR}{dt}= \gamma I
+$$
+
+Mari kita tuliskan model SIR kita ke dalam `odin`.
+
+Pertama, definisikan semua *state variable* yang ada pada model kita, beserta *initial value* masing-masing. Kita namai function kita `sir_model`.
+
+```{r}
+#| echo: true
+#| eval: false
+
+# buka library odin
+library(odin)
+
+# sir_model
+sir_model <- odin::odin({
+  
+  # state variables dan initial value-nya
+  initial(S) <- 999
+  initial(I) <- 1
+  initial(R) <- 0
+  
+  N = S + I + R
+  
+})
+
+```
+
+Di atas, kita menuliskan tiga *state variable*: S, I, dan R, dengan *initial value* masing-masing adalah 999, 1, dan 0. Total populasi, N, adalah 999 + 1 + 0 = 1000. Karena berasumsi populasi tertutup, maka nilai ini akan konstan.
+
+Selanjutnya, kita akan definisikan *model parameter* yang dimiliki model kita beserta nilai yang dimiliki masing-masing parameter tersebut.
+
+```{r}
+#| echo: true
+#| eval: false
+
+# buka library odin
+library(odin)
+
+# sir_model
+sir_model <- odin::odin({
+  
+  # state variables dan initial value-nya
+  initial(S) <- 999
+  initial(I) <- 1
+  initial(R) <- 0
+  
+  N = S + I + R
+  
+  # model parameter
+  beta <- 0.5
+  gamma <- 0.2
+  
+})
+
+```
+
+Pada potongan kode di atas, kita definisikan dua parameter \beta dan \gamma yang masing-masing memiliki nilai sebesar 0.5 dan 0.2.
+
+Langkah selanjutnya adalah menuliskan persamaan diferensial (ODE) untuk model SIR pada function model yang sedang kita tulis.
+
+```{r}
+#| echo: true
+#| output: false
+
+# buka library odin
+library(odin)
+
+# sir_model
+sir_model <- odin({
+  
+  # state variables dan initial value-nya
+  initial(S) <- 999
+  initial(I) <- 1
+  initial(R) <- 0
+  
+  N = S + I + R
+  
+  # model parameter
+  beta <- 0.5
+  gamma <- 0.2
+  
+  # ODE
+  deriv(S) <- -beta * S * I / N
+  deriv(I) <- beta * S * I / N - gamma * I
+  deriv(R) <- gamma * I
+  
+})
+
+```
+
+Kode di atas merupakan kode lengkap model SIR dengan parameter \beta dan \gamma bernilai 0.5 dan 0.2 yang *fix*, artinya tidak dapat diubah di luar function tersebut.
+
+Selanjutnya, kita akan menuliskan kode untuk melakukan simulasi. Untuk melakukan simulasi, kita harus menyimpan 'model' kita ke dalam sebuah obyek di R, menyiapkan rentang waktu simulasi (*timestep*), lalu melakukan simulasi sepanjang rentang waktu yang telah ditentukan melalui obyek 'model' kita.
+
+```{r}
+#| eval: true
+#| output: true
+
+set.seed(12345)
+
+# menyimpan obyek model
+sir_simulasi <- sir_model$new()
+
+# rentang waktu simulasi, dimulai dari 0
+timestep <- seq(0,60,by=1)
+
+# jalankan simulasi lalu simpan ke dalam obyek output_simulasi
+output_simulasi <- sir_simulasi$run(timestep)
+
+knitr::kable(head(output_simulasi))
+
+```
+
+Pada kode di atas, kita melihat tahapan pertama yaitu menyimpan 'model' ke dalam sebuah obyek dengan menggunakan `$new`. Lalu kita siapkan rentang waktu simulasi dan melakukan simulasi dengan menggunakan `$run`. Di akhir, kita melihat hasil simulasi model di beberapa *timestep* awal.
+
+Mari kita coba melakukan visualisasi dari hasil simulasi model yang telah kita hasilkan.
+
+```{r}
+#| echo: true
+#| warning: false
+
+# kita gunakan tidyverse
+library(tidyverse)
+
+# data dari output simulasi belum berupa data frame
+output_simulasi <- data.frame(output_simulasi)
+
+output_simulasi %>% 
+  ggplot(aes(x=t)) +
+  geom_line(aes(y=S,col="S"),linewidth=1) +
+  geom_line(aes(y=I,col="I"),linewidth=1) +
+  geom_line(aes(y=R,col="R"),linewidth=1) +
+  theme_bw(base_size=20) +
+  scale_colour_manual(breaks=c("S","I","R"),values=c("blue","red","green"),
+                      labels=c("Susceptible","Infected","Recovered")) +
+  labs(x="Timestep",y="No of individuals",col="State") +
+  theme(legend.position = c(0.8,0.5))
+
+```
+
+### Parameter model yang fleksibel
+
+Kita sudah dapat melakukan simulasi model SIR yang kita tulis menggunakan `odin` dengan parameter yang fix. Namun, terkadang kita ingin melakukan perbandingan antara nilai-nilai parameter yang berbeda terhadap hasil simulasi model kita. Untuk itu, saat penulisan model dengan `odin`, kita harus melakukan modifikasi dari function awal yang sudah kita tulis di awal. Mari menulis function baru untuk model SIR kita dengan nama sir_model_fleksibel.
+
+```{r}
+#| echo: true
+#| output: false
+
+# sir_model
+sir_model_fleksibel <- odin({
+  
+  # state variables dan initial value-nya
+  initial(S) <- 999
+  initial(I) <- 1
+  initial(R) <- 0
+  
+  N = S + I + R
+  
+  # model parameter
+  beta <- user(0.5)
+  gamma <- user(0.2)
+  
+  # ODE
+  deriv(S) <- -beta * S * I / N
+  deriv(I) <- beta * S * I / N - gamma * I
+  deriv(R) <- gamma * I
+  
+})
+```
+
+Kita dapat melihat bahwa pada function model SIR yang baru ini, tertulis `beta <- user(0.5)` dan `beta <- user(0.2)`. Penggunaan `user()` menandakan bahwa nilai parameter atau variabel tersebut dapat di-set oleh *user* model ketika melakukan penyimpanan obyek model. Nilai 0.5 dan 0.2 di dalam `user` menandakan nilai default apabila kita tidak memasukkan nilai baru ketika menyimpan model kita ke dalam sebuah obyek. Mari kita coba melakukan *set* ulang nilai parameter \beta menjadi 0.7 dan 0.3 untuk dua simulasi yang berbeda.
+
+```{r}
+#| eval: true
+#| output: true
+#| warning: false
+
+set.seed(12345)
+
+library(tidyverse)
+
+# menyimpan obyek model: tidak merubah nilai apa-apa, menggunakan nilai default
+sir_simulasi_fleksibel1 <- sir_model_fleksibel$new()
+
+# menyimpan obyek model: beta = 0.7, karena gamma tidak didefinisikan, berarti menggunakan nilai default 0.2
+sir_simulasi_fleksibel2 <- sir_model_fleksibel$new(beta=0.7)
+
+# menyimpan obyek model: beta = 0.3
+sir_simulasi_fleksibel3 <- sir_model_fleksibel$new(beta=0.3)
+
+# jalankan simulasi lalu simpan ke dalam obyek output_simulasi
+output_simulasi_fleksibel1 <- sir_simulasi_fleksibel1$run(timestep)
+output_simulasi_fleksibel2 <- sir_simulasi_fleksibel2$run(timestep)
+output_simulasi_fleksibel3 <- sir_simulasi_fleksibel3$run(timestep)
+
+# ubah ke dalam data frame, buat variabel baru bernama beta, lalu gabungkan semua output
+output_simulasi_fleksibel1 <- data.frame(output_simulasi_fleksibel1) %>% mutate(beta=0.5)
+output_simulasi_fleksibel2 <- data.frame(output_simulasi_fleksibel2) %>% mutate(beta=0.7)
+output_simulasi_fleksibel3 <- data.frame(output_simulasi_fleksibel3) %>% mutate(beta=0.3)
+
+output_simulasi_fleksibel <- bind_rows(output_simulasi_fleksibel1,
+                                       output_simulasi_fleksibel2,
+                                       output_simulasi_fleksibel3)
+
+# lakukan visualisasi
+output_simulasi_fleksibel %>% ggplot(aes(x=t)) +
+  geom_line(aes(y=I,col=as.character(beta)),linewidth=3) +
+  theme_bw(base_size=20) +
+  scale_colour_manual(breaks=c("0.5","0.7","0.3"),values=c("#005AB5","#E66100","#1AFF1A"),
+                      labels=c("0.5","0.7","0.3")) +
+  labs(x="Timestep",y="No of infected",col="beta") +
+  theme(legend.position = c(0.8, 0.8))
+
+```
+
+Sekarang kita telah berhasil melakukan simulasi model dengan berbagai nilai \beta. Dapatkah Anda melakukan simulasi dengan nilai \gamma yang berbeda?
+
+### Nilai awal yang fleksibel untuk *state variable*
+
+Kita juga bisa membuat *initial value* untuk *state variable* menjadi fleksibel dengan melakukan sedikit modifikasi. Misal, kita ingin membuat jumlah orang yang terinfeksi (I) di awal berbeda-beda untuk tiap simulasi, maka kita bisa melakukan modifikasi kode function model sebagai berikut. Nama function model kita yang baru adalah `sir_model_fleksibel_init`.
+
+```{r}
+#| echo: true
+#| output: false
+
+# sir_model
+sir_model_fleksibel_init <- odin({
+  
+  # state variables dan initial value-nya
+  # nilai awal untuk I adalah I0
+  initial(S) <- 1000 - I0
+  initial(I) <- I0
+  initial(R) <- 0
+  
+  N = S + I + R
+  
+  I0 <- user(1)
+  
+  # model parameter
+  beta <- user(0.5)
+  gamma <- user(0.2)
+  
+  # ODE
+  deriv(S) <- -beta * S * I / N
+  deriv(I) <- beta * S * I / N - gamma * I
+  deriv(R) <- gamma * I
+  
+})
+```
+
+Pada kode di atas, kita membuat sebuah variabel baru bernama `I0` yang menjadi *initial value* untuk I. Kita menggunakan `user()` supaya kita bisa mengatur *initial value* untuk I ketika menyimpan obyek model untuk melakukan simulasi. Nilai *default* untuk I pada kode diatas adalah 1. Mari kita lakukan simulasi untuk *initial value* I yang lain yaitu 5 dan 8
+
+```{r}
+#| eval: true
+#| output: true
+#| warning: false
+
+set.seed(12345)
+
+library(tidyverse)
+
+# menyimpan obyek model: tidak merubah nilai apa-apa, menggunakan nilai default
+sir_simulasi_fleksibel_init1 <- sir_model_fleksibel_init$new()
+
+# menyimpan obyek model: beta = 0.7, karena gamma tidak didefinisikan, berarti menggunakan nilai default 0.2
+sir_simulasi_fleksibel_init2 <- sir_model_fleksibel_init$new(I0=5)
+
+# menyimpan obyek model: beta = 0.3
+sir_simulasi_fleksibel_init3 <- sir_model_fleksibel_init$new(I0=8)
+
+# jalankan simulasi lalu simpan ke dalam obyek output_simulasi
+output_simulasi_fleksibel_init1 <- sir_simulasi_fleksibel_init1$run(timestep)
+output_simulasi_fleksibel_init2 <- sir_simulasi_fleksibel_init2$run(timestep)
+output_simulasi_fleksibel_init3 <- sir_simulasi_fleksibel_init3$run(timestep)
+
+# ubah ke dalam data frame, buat variabel baru bernama beta, lalu gabungkan semua output
+output_simulasi_fleksibel_init1 <- data.frame(output_simulasi_fleksibel_init1) %>%
+  mutate(I0=1)
+output_simulasi_fleksibel_init2 <- data.frame(output_simulasi_fleksibel_init2) %>%
+  mutate(I0=5)
+output_simulasi_fleksibel_init3 <- data.frame(output_simulasi_fleksibel_init3) %>%
+  mutate(I0=8)
+
+output_simulasi_fleksibel_init <- bind_rows(output_simulasi_fleksibel_init1,
+                                       output_simulasi_fleksibel_init2,
+                                       output_simulasi_fleksibel_init3)
+
+# lakukan visualisasi
+output_simulasi_fleksibel_init %>% ggplot(aes(x=t)) +
+  geom_line(aes(y=I,col=as.character(I0)),linewidth=3) +
+  theme_bw(base_size=20) +
+  scale_colour_manual(breaks=c("1","5","8"),values=c("#005AB5","#E66100","#1AFF1A"),
+                      labels=c("1","5","8")) +
+  labs(x="Timestep",y="No of infected",col="I0") +
+  theme(legend.position = c(0.8, 0.8))
+
+```
+
+Sekarang kita telah berhasil menuliskan model SIR dengan *initial value* yang fleksibel untuk tiap simulasi. Dapatkah Anda juga menambahkan unsur fleksibilitas untuk total populasi N ke dalam model? (contoh kode untuk ini dapat dilihat di akhir materi ini).
+
+## Ekstensi model SIR
+
+### Model SIR dengan demografi
+
+Kita dapat melakukan ekstensi untuk model SIR dengan menambahkan faktor demografi berupa kematian dan kelahiran ke dalam model. Dengan proses ini, kita dapat melihat efek jangka panjang dari penularan suatu penyakit di level populasi. Kode untuk menambahkan unsur demografi ke dalam model SIR adalah sebagai berikut. Kita akan melakukan ekstensi terhadap kode model SIR yang sudah mengikutsertakan fleksibilitas *model parameter* dan *initial value*.
+
+Formula persamaan diferensial (ODE) untuk model SIR dengan demografi adalah:
+
+$$
+\frac{dS}{dt}=\mu N -\beta S \frac{I}{N} - \mu S
+$$
+
+$$
+\frac{dI}{dt}=\beta S \frac{I}{N} - \gamma I - \mu I
+$$
+
+$$
+\frac{dR}{dt}= \gamma I - \mu R
+$$
+
+```{r}
+#| echo: true
+#| output: false
+
+# sir_model
+sir_model_demografi <- odin({
+  
+  # state variables dan initial value-nya
+  # nilai awal untuk I adalah I0
+  initial(S) <- 100000 - I0
+  initial(I) <- I0
+  initial(R) <- 0
+  
+  N = S + I + R
+  
+  I0 <- user(1)
+  
+  # model parameter
+  beta <- user(0.5)
+  gamma <- user(0.2)
+  mu <- 1/(70 * 365) # mortality rate
+  
+  # ODE
+  deriv(S) <- mu * N -beta * S * I / N - mu * S
+  deriv(I) <- beta * S * I / N - gamma * I - mu * I
+  deriv(R) <- gamma * I - mu * R
+  
+})
+```
+
+Dari kode di atas, kita dapat melihat bahwa pada setiap kompartemen, terdapat proses kematian masing-masing `mu * S`, `mu * I`, dan `mu * R`. Sedangkan, pada kompartemen S terdapat tambahan unsur kelahiran `mu * N` atau bisa kita tuliskan juga sebagai `mu * (S+I+R)`. Dalam hal ini, kita mengasumsikan bahwa total populasi adalah konstan sepanjangan waktu. Kita juga mengasumsikan bahwa setiap bayi yang baru lahir akan terlahir dalam keadaan *susceptible* terhadap penyakit yang akan kita modelkan.
+
+Mari kita coba simulasikan model ini untuk jangka waktu yang lama (150 tahun)
+
+```{r}
+#| echo: true
+#| warning: false
+
+# menyimpan obyek model
+sir_demografi_simulasi <- sir_model_demografi$new()
+
+# rentang waktu simulasi, dimulai dari 0
+timestep2 <- seq(0,150*365,by=1)
+
+# jalankan simulasi lalu simpan ke dalam obyek output_simulasi
+output_demografi_simulasi <- sir_demografi_simulasi$run(timestep2)
+
+knitr::kable(head(output_demografi_simulasi))
+
+# visualisasi
+output_demografi_simulasi <- data.frame(output_demografi_simulasi)
+
+output_demografi_simulasi %>% 
+  ggplot(aes(x=t)) +
+  geom_line(aes(y=S,col="S"),linewidth=1) +
+  geom_line(aes(y=I,col="I"),linewidth=1) +
+  geom_line(aes(y=R,col="R"),linewidth=1) +
+  theme_bw(base_size=20) +
+  scale_colour_manual(breaks=c("S","I","R"),values=c("blue","red","green"),
+                      labels=c("Susceptible","Infected","Recovered")) +
+  labs(x="Timestep",y="No of individuals",col="State") +
+  theme(legend.position = c(0.8,0.8))
+
+```
+
+Terlihat bahwa ketika terjadi proses kematian dan kelahiran populasi susceptible, dalam jangka panjang akan terjadi outbreak-outbreak yang disebabkan adanya populasi susceptible baru yang cukup besar.
+
+### SEIR model
+
+Model terakhir yang akan kita coba adalah model SEIR. SEIR adalah ekstensi model SIR dengan menambahkan *state variable* baru yaitu E, exposed. Pada SEIR model diasumsikan bahwa setiap individu yang terkena infeksi tidak serta-merta menjadi infectious. Namun harus melewati periode *latency* sebelum akhirnya menjadi *infectious* dan memasuki kompartemen I. Kecepatan proses perpindahan dari E ke I diatur oleh parameter \sigma yang merupakan *latency rate* atau \frac{1}{durasi periode laten}. Maka, persamaan diferensial (ODE) untuk model SEIR adalah:
+
+$$
+\frac{dS}{dt}=-\beta S \frac{I}{N}
+$$
+
+$$
+\frac{dE}{dt}=\beta S \frac{I}{N} - \sigma E
+$$
+
+$$
+\frac{dI}{dt}=\sigma E - \gamma I
+$$
+
+$$
+\frac{dR}{dt}= \gamma I
+$$
+
+Kode untuk model SEIR adalah sebagai berikut: 
+
+```{r}
+#| echo: true
+#| output: false
+
+# seir_model
+seir_model <- odin({
+  
+  # state variables dan initial value-nya
+  # nilai awal untuk I adalah I0
+  # tambahkan kompartemen E
+  initial(S) <- 1000 - I0
+  initial(E) <- 0
+  initial(I) <- I0
+  initial(R) <- 0
+  
+  N = S + E + I + R
+  
+  I0 <- user(1)
+  
+  # model parameter
+  # tambahkan parameter sigma
+  beta <- user(0.5)
+  gamma <- user(0.2)
+  sigma <- user(0.33)
+  
+  # ODE
+  deriv(S) <- -beta * S * I / N
+  deriv(E) <- beta * S * I / N - sigma * E
+  deriv(I) <- sigma * E - gamma * I
+  deriv(R) <- gamma * I
+  
+})
+```
+
+Mari kita simulasikan model SEIR dengan parameter yang sama dengan model SIR yang telah kita simulasikan sebelumnya, kecuali tambahan satu kompartemen dan parameter baru pada model SEIR. Lalu kita bandingkan hasil kurva infected kedua model.
+
+```{r}
+#| eval: true
+#| output: true
+#| warning: false
+
+set.seed(12345)
+
+library(tidyverse)
+
+# menyimpan obyek model: tidak merubah nilai apa-apa, menggunakan nilai default
+seir_simulasi <- seir_model$new()
+
+# rentang waktu simulasi, dimulai dari 0
+timestep3 <- seq(0,120,by=1)
+
+# jalankan simulasi lalu simpan ke dalam obyek output_simulasi
+output_simulasi_seir <- seir_simulasi$run(timestep3)
+
+# ubah ke dalam data frame, buat variabel baru bernama beta, lalu gabungkan semua output
+output_simulasi_seir <- data.frame(output_simulasi_seir) %>% mutate(model="SEIR")
+output_simulasi <- output_simulasi %>% mutate(model="SIR")
+
+output_simulasi_sir_seir <- bind_rows(output_simulasi,
+                                      output_simulasi_seir)
+
+# lakukan visualisasi
+output_simulasi_sir_seir %>% ggplot(aes(x=t)) +
+  geom_line(aes(y=I,col=as.character(model)),linewidth=3) +
+  theme_bw(base_size=20) +
+  scale_colour_manual(breaks=c("SIR","SEIR"),values=c("#005AB5","#E66100"),
+                      labels=c("SIR","SEIR")) +
+  labs(x="Timestep",y="No of infected",col="Model") +
+  theme(legend.position = c(0.8, 0.8))
+
+```
+
+Kita lihat bahwa hasil kurva infected kedua model menghasilkan pola yang cukup berbeda. Pemilihan model yang sesuai dengan *natural history* dari penyakit yang diteliti akan menentukan dinamika penularan di level populasi.
+
+### Membuat populasi juga fleksibel
+
+Contoh kode untuk membuat variabel populasi juga menjadi fleksibel:
+
+```{r}
+#| echo: true
+#| output: false
+
+# sir_model
+sir_model_fleksibel_init_N <- odin({
+  
+  # state variables dan initial value-nya
+  # nilai awal untuk I adalah I0
+  initial(S) <- N - I0
+  initial(I) <- I0
+  initial(R) <- 0
+  
+  N = user(1000)
+  
+  I0 <- user(1)
+  
+  # model parameter
+  beta <- user(0.5)
+  gamma <- user(0.2)
+  
+  # ODE
+  deriv(S) <- -beta * S * I / N
+  deriv(I) <- beta * S * I / N - gamma * I
+  deriv(R) <- gamma * I
+  
+})
+```
+
+### Membuat output berupa insidensi, bukan hanya prevalensi
+
+Umumnya, data surveilans penyakit rutin yang kita miliki berupa insidensi, bukan prevalensi. `odin` dapat memberikan output *customised* dengan menggunakan fitur `output` ketika mengetik kode function model kita. Kita mengetahui bahwa untuk model SIR, formula untuk insidensi pada setiap *timestep* adalah
+
+$$
+insidensi = \beta S \frac{I}{N}
+$$
+
+Maka kita dapat menambahkan kode yang sesuai rumus tersebut, dan menggunakan `output` untuk mendapatkan output insidensi dari simulasi model kita. Berikut adalah kode `odin` untuk mendapatkan insidensi.
+
+```{r}
+#| echo: true
+#| output: false
+
+sir_model_insidensi <- odin::odin({
+  
+  # state variables dan initial value-nya
+  initial(S) <- 999
+  initial(I) <- 1
+  initial(R) <- 0
+  
+  N = S + I + R
+  
+  # model parameter
+  beta <- 0.5
+  gamma <- 0.2
+  
+  # ODE
+  deriv(S) <- -beta * S * I / N
+  deriv(I) <- beta * S * I / N - gamma * I
+  deriv(R) <- gamma * I
+  
+  # output
+  output(incidence) <- beta * S * I / N
+  
+})
+
+```
+
+Mari kita simulasikan.
+
+```{r}
+#| eval: true
+#| output: true
+#| warning: false
+
+set.seed(12345)
+
+library(tidyverse)
+
+# menyimpan obyek model: tidak merubah nilai apa-apa, menggunakan nilai default
+sir_simulasi_insidensi <- sir_model_insidensi$new()
+
+# jalankan simulasi lalu simpan ke dalam obyek output_simulasi
+output_simulasi_insidensi <- sir_simulasi_insidensi$run(timestep)
+
+# ubah ke dalam data frame, buat variabel baru bernama beta, lalu gabungkan semua output
+output_simulasi_insidensi <- data.frame(output_simulasi_insidensi)
+
+# lakukan visualisasi
+output_simulasi_insidensi %>% ggplot(aes(x=t)) +
+  geom_line(aes(y=incidence,col="Incidence"),linewidth=3) +
+  geom_line(aes(y=I,col="Infected"),linewidth=3) +
+  theme_bw(base_size=20) +
+  scale_colour_manual(breaks=c("Incidence","Infected"),values=c("#005AB5","#E66100"),
+                      labels=c("Incidence","Infected")) +
+  labs(x="Timestep",y="No of incidence/currently infected",col="Model") +
+  theme(legend.position = c(0.8, 0.8))
+
+```
+
+## Penutup
+
+Pada materi ini, kita sudah belajar untuk menuliskan beberapa model penularan penyakit 'SIR family' dengan menggunakan package `odin`, lalu melakukan pengolahan dan visualisasi output secara sederhana. Harapannya dengan pengetahuan dasar mengenai `odin` ini, teman-teman dapat menggunakannya untuk keperluan penulisan model penyakit lain yang teman-teman ingin lakukan, atau melakukan adaptasi dari model yang sudah ditulis menggunakan program atau package lain. Semoga bermanfaat. Terima kasih!
+
+
+
